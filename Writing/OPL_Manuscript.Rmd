@@ -1,0 +1,443 @@
+---
+title: "An Investigation into the Optimal Experimental Design for On-Farm Precision Experimentation"
+author:
+  - Aolin Gong^[University of Illinois, aoling2@illinois.edu], 
+    Taro Mieno^[University of Nebraska Lincoln, tmieno2@unl.edu], 
+    Brendan Kuhns^[University of Illinois, kuhns2@illinois.edu],
+    David S. Bullock^[University of Illinois, dsbulloc@illinois.edu]
+output:
+  bookdown::word_document2:
+    pandoc_args: ["-Fpandoc-crossref"]
+    fig_caption: yes
+    number_sections: yes
+    reference_docx: "word_template.docx"
+abstract: "Abstract: "
+bibliography: OPL.bib
+csl: agronomy-journal.csl
+---
+
+```{r echo = F, include=FALSE}
+library(knitr)
+library(here)
+library(officedown)
+library(officer)
+
+opts_chunk$set(
+  fig.align = "center",
+  fig.retina = 5,
+  warning = F,
+  message = F,
+  cache = T,
+  echo = F,
+  fig.cap = TRUE
+)
+here()
+```
+
+```{r cache = F}
+#--- packages ---#
+library(data.table)
+library(tidyverse)
+library(flextable)
+library(stringr)
+library(sf)
+library(lfe)
+library(modelsummary)
+library(patchwork)
+```
+
+```{r source-figure, cache = F, results = "hide"}
+N_star_raster <- readRDS(here("Figures", "N_star_raster.rds"))
+treatment_map <- readRDS(here("Figures", "treatment_map.rds"))
+g_num_treats_gwr <- readRDS(here("Figures", "g_num_treats_gwr.rds"))
+g_num_treats_brf <- readRDS(here("Figures", "g_num_treats_brf.rds"))
+g_num_treats_gam <- readRDS(here("Figures", "g_num_treats_gam.rds"))
+g_plot_length_gwr <- readRDS(here("Figures", "g_plot_length_gwr.rds"))
+g_plot_length_brf <- readRDS(here("Figures", "g_plot_length_brf.rds"))
+g_plot_length_gam <- readRDS(here("Figures", "g_plot_length_gam.rds"))
+g_yield_accuracy_gwr <- readRDS(here("Figures", "g_yield_accuracy_gwr.rds"))
+g_yield_accuracy_brf <- readRDS(here("Figures", "g_yield_accuracy_brf.rds"))
+g_yield_accuracy_gam <- readRDS(here("Figures", "g_yield_accuracy_gam.rds"))
+
+latin_design <- readRDS(here("Figures", "design_map_13_field_12_length_4_treatment.rds")) %>% 
+  + ggtitle(" ")
+
+latin_design_strip <- readRDS(here("Figures", "design_map_13_field_144_length_4_treatment.rds")) %>% 
+  + ggtitle(" ")
+```
+
+```{r source-table, cache = F, results = "hide"}
+data_summary_0 <- readRDS(here("Tables", "data_summary_0.rds"))
+data_summary_1 <- readRDS(here("Tables", "data_summary_1.rds"))
+data_summary_2 <- readRDS(here("Tables", "data_summary_2.rds"))
+data_summary_3 <- readRDS(here("Tables", "data_summary_3.rds"))
+data_summary_4 <- readRDS(here("Tables", "data_summary_4.rds"))
+data_summary_5 <- readRDS(here("Tables", "data_summary_5.rds"))
+data_summary_6 <- readRDS(here("Tables", "data_summary_6.rds"))
+```
+
+To generate profit-enhancing site-specific input application recommendations in on-farm checkerboard trials, researchers empirically estimate site-specific yield-to-input-rate response functions. When alternative experimental designs are used, the variance patterns of trial treatments within the field are clearly different, affecting the estimation of site-specific yield-to-input-rate response functions. To gain a better understanding of how different experimental designs affect the effectiveness of trial data, generate better data for statistical analysis, and ultimately generate more cost-effective management recommendations, we investigate the optimal experimental design in this paper, including the optimal plot length, and optimal number of treatments.
+
+With the minimum width of experimental plots fixed due to the size of farming equipment, and shorter plot lengths resulting in additional trial plots and thus greater variation of trial treatments in different parts of the field, there is also a trade-off between the measurement accuracy of data from a single plot and the number of plots in an experiment. To balance the trade-off between the reliability of data from a single plot and the variation in trial treatments in a trial field, we use Monte-Carlo simulations to compare the economic performance of simulated experimental trials with a variable experimental design settings and determine the optimal choice.
+
+`r run_pagebreak()`
+
+# Introduction
+
+Precision agriculture (PA) is a site-specific crop and field management concept that maximizes profitability using information-based agriculture strategies such as input rate strategies. New technologies have been introduced to facilitate the adoption of site-specific management practices [@schepers1998precision] in order to increase its efficiency. Specifically, global agricultural production is changing as a result of technologies based on computerized geographic information and global positioning systems (GPS). PA is best understood as a series of procedures that include the following: (1) information acquisition, (2) management decisions, (3) field operation, and (4) analysis and evaluation [@sudduth1998engineering].
+
+Since 2000, academic and commercial agriculture research has resulted in a number of PA innovations, including yield monitoring systems [@al2000verification; @loghavi2008development], variable rate input application [@khosla2002use; @koch2004economic], and management zone determination [@fleming2000evaluating; @taylor2007establishing]. Additionally, in order to accommodate the increased size and capacity of the farming operation, [@kyveryga2018farm] pprovided us with an overview of how to plan, design, and conduct replicated on-farm strip trials . These advancements elevated PA to new heights.
+
+In recent years, agronomic researchers have begun to conduct large-scale on-farm field trials using GPS-based precision agriculture technology, particularly variability rate technology. A research infrastructure was established to support the annual conduct of hundreds of farm trials worldwide, as well as rigorous quantitative and data-driven analyses. This ground-breaking type of agronomic field trial is commonly referred to as on-farm precision experimentation (OFPE). OFPE trials adhere to a number of established small-plot trial protocols, including the division of the field into plots and randomization of treatment allocation to plots. These are referred to as automated “checkerboard” field trials conducted on-farm. Figure \@ref(fig:Strip-trial-graph) compares a very-small plot trial to a strip trial, while the Figure 8.8 depicts a nitrogen treatment map from a checkerboard trial. The figures demonstrate that checkerboard trials allow for more repetitions of each treatment in different areas of the field compared with strip trials do, resulting in superior information. Thus, checkerboard trials outperform strip trials in this regard.
+
+From the description of PA above, it is clear that information acquisition is critical to the procedure and that PA will not maximize farm profitability unless agricultural strategies are founded on accurate and sufficient data. Given that effective data collection is contingent on the design of field trials, research into the design of field experiments appears to be growing in importance.
+
+[@petersen1994agricultural] argued that the field plot is the fundamental experimental unit in field experiments. These plots represent the smallest components of a field experiment in which treatments are varied, and thus serve as the basis for evaluating treatment yield. Previously published literature frequently discusses the design of very-small plot trials and strips trials. Small plot trials are conducted manually or with expensive, specialized machinery, with the primary goal of minimizing soil variability in field plots [@petersen1994agricultural]. Checkerboard trials, as illustrated in \@ref(fig:Strip-trial-graph) and \@ref(fig:treatment-map), are a larger version of very-small plot trials. As a result, in addition to soil variability, machinery errors must be factored into the design of checkerboard trial field plots. Strip trials place a premium on treatment allocation design, and the field plot is always a strip of the field. In contrast to strip trials, the design of field plots is critical in checkerboard trials. However, there is a dearth of academic literature examining the efficient design of checkerboard trials. A recent study discovered that a combine can be used to determine the yield response to treatment at 61 meters or greater [@bergman2021best]. However, 61 meters is not significantly shorter than the current standard of 85 meters. This paper will examine whether the plot can be further condensed.
+
+While shorter plot lengths result in more plots and greater treatment variation across the field, they also result in an increase in measurement error within a single plot. Additionally, the number of treatments has an effect on the number of replications of each treatment across the field. The primary objective of this paper is to examine the statistical trade-off between measurement error per plot and the variation pattern of trial treatments in a field with variable plot length, as well as the profit implications. Monte-Carlo simulations are used to assess the accuracy of information obtained from various plot lengths and treatment counts in a simulated field trial.
+
+The objectives of this study are to 1) determine the optimal experimental design for checkerboard trials, including plot length and treatment number, 2) determine how the optimal experimental design is affected by environmental factors such as yield monitor accuracy and field size, and 3) determine whether the Latin Square checkerboard trial is a better choice than strip trials for providing valuable guidance in agricultural production.
+
+The following summarizes the paper’s major findings: 1) for most trials in fields with wide soil variation, four treatment levels are recommended; for most trials in fields with relatively homogeneous soils, six treatment levels are recommended; 2) for most fields, the shortest plot considered in this paper is the best option; 3) increasing yield monitor accuracy does not significantly improve estimation accuracy; and 4) checkerboard trials produce more profitable estimation than strip trials.
+
+# Background
+
+Variable-rate fertilization has the potential to reduce the total amount of fertilizer applied and increase profit in a single field in agricultural production when compared to uniform-rate fertilization. [@bongiovanni2004precision] demonstrated how variable nitrogen rate application maintained farm profitability even when nitrogen application was limited to less than half the uniform rate recommended. Precision technologies such as automatic guidance systems and automatic section control enable farmers to tailor fertilizer, seed, and chemical rates to soil and other conditions using site-specific knowledge. Thus, with precision technologies, deriving an optimized strategy for farm fields becomes possible. However, due to the variability of soil and field characteristics across a country, no single management strategy is optimal for all producers. Producers can make site-specific management decisions through field experiments conducted on farms [@mcbratney2005future; @whelan2003farm]. The primary impediment is identifying distinct management zones within a field and the corresponding optimal input management strategies for each management zone. At the moment, professional managers and consultants are assisting producers in designing field experiments, organizing data, and making fertilizer application decisions in order to achieve optimal input management. Extensive quantitative and data-driven analyses of field experiments are being conducted to optimize fertilizer application, and new management advice is being given after statistical analyses confirm its superiority to current management. With field experiments serving as the primary source of information for a particular field, it is critical to design field experiments efficiently.
+
+Since the $1980s$, the design of field plots as the unit of observation in agronomic field experiments has been debated. Due to the variability of soil in the field during the early stages of experimental trials, plots were frequently rectangles that measured $12.2$ meters by $4.6$ meters [@binford1990tissue; @binford1992optimal]. These very-small plot experiments were phased out as new technologies such as fertilizer applicators and large combines, which enabled field experiments to be scaled up. Strip trials have grown in popularity over the last two decades. For instance, [@ostermeier2007using] of Iowa State University described strip trials conducted in 42 fields in 18 different counties throughout the state of Iowa: “Two N fertilizer rates were alternately applied across each strip to accommodate three to seventeen replications at different sites. Within each site, the width of each treatment strip was uniform, but varied according to the sprayer and yield monitor widths. The strip length was determined by the field length and was at least 500 meters.”
+
+A significant disadvantage of strip trials is readily apparent from the description above; a strip trial has a limited number of replications for each treatment across the field, reducing the reliability of the conclusions or estimates drawn from the data. Strip trials can be improved by shortening the field plot, which results in more replications for each treatment, as seen in checkerboard trials.
+
+While it appears obvious that randomized checkerboard designs are superior to strip trials in certain ways, there is some resistance and doubt regarding their effectiveness. Part of this resistance stems from the fact that, while there are obvious advantages to shrinking the plot, the measurement error increases as the plot length decreases [@petersen1994agricultural]. The measurement error in checkerboard trials is primarily due to the machinery’s inaccuracy. Machinery refers to the yield monitor and the nitrogen sprayer in this context. For some older machines, the nitrogen sprayer may not immediately adjust to the designed rate when moving between areas with different yield levels, particularly when moving from one treatment plot to the next; however, the sprayer’s lag can easily be observed and eliminated during the data cleaning process, and thus poses little difficulty for statistical analysis. In comparison, inaccurate yield estimations from the yield monitor are more difficult to detect, as they are influenced by soil characteristics, input rates, and the yield level, among other factors.
+
+The primary constraint on a yield monitor’s accuracy is a ten- to twelve-second delay in reporting the true yield level, which results in a transition zone between different treatment plots [@luck2004precision]. Additionally, the speed at which the combine with yield monitors is driven is dependent on the yield level. The combines operate at a slower speed in high-yield areas and at a faster speed in low-yield areas. As a result, the length of transition zones between treatment plots varies and cannot be easily removed. Because soil variability is not considered in this paper, the primary reason for yield monitor inaccuracy leading to higher measurements in smaller plots is the lag in reporting yield level. Even though such algorithms have been integrated into many modern yield monitors to account for the delay, the algorithms are imperfect, and the error cannot be completely eliminated. Thus, when plots are made shorter, smaller portions of reliable data can be extracted from each plot, constraining the reliability of information obtained from randomized checkerboard trials. The work of [@trevisan2019improving] is used to account for a paper’s inaccuracies. Additionally, yield monitors often report data at a frequency of 1 Hertz, and if plots are made too short, there will be insufficient yield data estimates to aggregate for each plot, resulting in increased yield measurement error; additionally, the percentage of transition zones eliminated from the data will increase. In conclusion, yield monitor error is the primary constraint on field plot length reduction in checkerboard trials.
+
+Currently, researchers are designing checkerboard trials with approximately 85-meter-long field plots, in accordance with the conclusion reached by [@al2000verification]. Al-Mahasneh conducted tests with a Case IH 2166 AFS yield monitor and concluded that the monitor’s accuracy (error percentage per plot) increased with plot length when a uniform input rate was applied to the entire field. However, yield monitors have evolved significantly since Al-study Mahasneh’s twenty years ago. It is possible that more advanced machinery has resulted in a reduction in the optimal length of experimental field plots.
+
+We discuss the two primary causes of yield monitor inaccuracy described above in two separate sections of this paper. The first section is the transition zone, during which yield monitor errors are more frequent as the monitor adjusts itself to report the yield level. The other section is the analysis zone, which is located between the two transition zones and contains data that are reliable and usable for analysis. The analysis zone should be sufficiently long to aggregate an adequate number of yield data observations in each field plot.
+
+# Methodology
+
+In practice, field trials are conducted according to a treatment map, yield data are collected during the harvest season by yield monitors, and the data are then cleaned and analyzed by researchers. We simulate these steps for a variety of nitrogen experimental designs for corn trials, varying in field size, plot length, and treatment number. Additionally, a comparative static analysis of yield monitor accuracy is conducted. All of the Monte Carlo simulation computer programs are written in R.
+
+In reality, the soil characteristics of the trial fields vary considerably. We consider trial fields that have both relatively large and small variations in soil characteristics between them in this study. Specifically, we consider both heterogeneous and homogeneous fields.
+
+## Field Setup
+
+### Cell-level Data Generation
+
+From the preceding steps, actual yield data are simulated at a spatial resolution finer than that of the field plot in order to produce data with a higher resolution in the simulation. The experimental field is divided into cells measuring 1.79 meters by 1.79 meters because that is the distance traveled by the yield monitor in one second at an average speed of 6.44 kilometers per hour. Thus, each cell generates one yield observation, which is spatially correlated among the cells. Actual yield data are generated for each cell using a yield response function and a spatial error component. Then, for each cell, yield observations are generated by adding a measurement error. The yield measurements are subsequently aggregated at the plot level later.
+
+More precisely, one iteration of a simulation with a given set of parameters consists of the following steps:
+
+1.  Nitrogen treatments are randomly assigned to each plot.
+2.  The treatment at the plot level is translated to the cell level.
+3.  N application error is added to the N treatment at the cell level.
+4.  For each cell, the actual yield is generated by a quadratic plateau yield response function and a spatial error term.
+5.  The measurement error $e$ is generated from the normal distribution $N \left( 0 , \sigma _ { e } ^ { 2 } \right)$ where $\sigma _ { e } ^ { 2 }$ is associated with parameters describing yield monitor accuracy, and the estimated yield $\tilde { y }$ is obtained by adding the measurement error $e$ to the actual yield.
+6.  The measured yield at the cell level is then translated to plot level.
+7.  A production function $y _ { i }$ is estimated.
+8.  The economic optimum nitrogen rate (EONR) and estimated profit are obtained from the estimated production function.
+
+For each experimental design, this process is repeated one thousand times. The optimal plot length and treatment number are determined by comparing the estimated EONR and associated profit from simulations to the true EONR and associated true profit derived from the quadratic plateau function. The remainder of this paper uses simulated data for both actual and measured yield.
+
+### Experimental Setting
+
+We simulate checkerboard trials in fields ranging in size from 13.29 to 26.58 hectares. The 13.29-hectare field was divided into 288\*144 cells (288 cells wide by 144 cells long), while the 26.58-hectare field was divided into 288\*288 cells (288 cells in both width and length). Four different plot lengths are considered for each field, and each plot contains a different number of cells. Plots with 12, 24, 48 cells, as well as all cells in a row, are considered, as are plots with a length of 21.48 m, 42.96 m, 85.92 m, and the length of the field. As mentioned previously, the field plot is divided into two sections: the transition zone and the analysis zone. Cells within the analysis zone will then be subdivided into 6*12 cell subplots to serve as units of observation. The length of the trial plot is determined by the length of the transition zone and the analysis zone combined. Because the yield monitor takes 12 yield estimates in a row and makes two passes on a single plot, the trial plot is set to be 24 cells wide. However, the cells are simplified to 1.79 m by 1.79 m. While the length of the field plot varies between simulations, the width of the trial plot remains constant at 18.3 meters, as determined by the assumed widths of the sprayer and harvester. The plot width of 18.3 meters is inconsistent with the plot width of 24 cells, but since we are examining the plot length in this paper, the simulated plot width being inconsistent with the real machine dimension is irrelevant.
+
+Nitrogen rates ranging from 150 to 250 kg of nitrogen per hectare are used as treatments. Treatments with nitrogen rates of 4, 6, and 8 are simulated for each combination of plot length and field size. Figure \@ref(fig:latin-map) illustrates an example of a treatment map with a Latin design in a 13.29-hectare field with 85.92-meter-long field plots.
+
+### Latin Design
+
+Field plots that are similar are grouped, and variation between groups can be removed from the experimental error by assigning all treatments to each group separately and independently [@gomez1984statistical]. We use the “Latin square” design, which has been the subject of academic debate for nearly a century [@fisher1992arrangement], as the treatment design. Despite this, researchers conducting field trials have used the Latin square design sparingly. In this study, a Latin square is n by matrix of N plots, which denotes the number of treatments and the N rates are arranged such that each rate occurs exactly once in each row and column. Figure \@ref(fig:latin-map) illustrates an example of a treatment map with a Latin design in a simulated 13.29-hectare field with 85.92-meter-long field plots. Notably, the pattern of N rates is fixed to ensure that all squares are identical. This is to ensure that no two adjacent plots are assigned the same rate. Additionally, the order in which the N rates are listed in each row of a square mitigates the effect of relatively large changes in the targeted N rates.
+
+## The Transition Zone
+
+The transition zone length is determined by the time required for the yield monitor to respond to a yield change between adjacent plots. After the harvester’s header cuts the grain, it travels through the harvester until it reaches an impact plate at the top of the clean grain elevator. This sensor establishes a relationship between the force exerted by the grain on the plate and the mass flow. A moisture sensor located approximately in the vicinity of the impact plate will measure the volumetric water content, which will be combined with with impact plate data and other parameters to estimate the yield.
+
+This series of yield data is associated with the GPS coordinates of the measurement location. Due to the time required for the crop matter to travel through the harvester, the yield reading must be shifted in space to account for the machine’s flow rate and travel speed. This adjustment occurs in the machine prior to the creation of yield maps. According to [@trevisan2019improving], postprocessing must include a three-second shift in the yield values relative to the geospatial coordinates to ensure proper representation. Transition zones between plots are created based on the three-second shift in the data to ensure that measurements from one treatment are not applied to another treatment during data analysis. Additionally, this three-second shift eliminates the effects of mixing the crop matter in the header.
+
+Apart from crop matter flow, improper geospatial correlation can occur as a result of a GPS inaccuracy. GPS data inaccuracies are a result of fundamental system inaccuracies. While some systems achieve an accuracy of a few centimeters, the wide area augmentation system’s differential correction may achieve a pass-to-pass accuracy of only 25.4 cm [@Advancedfarmingsystems20206]. With a longer time, errors may reach 1.0 m. [@Advancedfarmingsystems20204]. According to a survey of farmers who participated in our trials, many used more sophisticated correction services such as real-time kinematic (RTK), John Deere SF3, or OmniStar HP. These systems each claim a pass-to-pass precision of 2.5 cm [@AFSAdvancedfarmingsystems2020; @JohndeereRTK], 3.0 cm [@JohndeereStarFire], and 10 cm [@AFSAdvancedfarmingsystems2020]. The manufacturer’s specifications are used to determine all accuracy levels. This level of GPS precision is accounted for in the work of [@trevisan2019improving] aand thus is not added to the transition zone’s length.
+
+Typically, the applicator is wider than the combine. For the purposes of this work, it will be assumed that the width of the applicator is a common multiple of the harvesting width, as illustrated in table \@ref(fig:transition), where the combine must make two passes per plot. Thus, at both ends of a plot, the transition zone must account for three seconds of vehicle travel. The transition zone should be three cells in length at both ends of the plot in our model. The length required varies according to the travel speed. With a common travel speed of 1.79 m per second for a combine harvester in a suitably yielding crop, 3 seconds of vehicle travel results in a conservative length of approximately 5.37 m for the transition zone applied to each end of the plot. This estimated error is constant in all directions of travel. Plot lengths will then be determined by the number of yield observations generated by the yield monitor at a data recording rate of 1 Hertz, plus the length of transition zones.
+
+Table \@ref(tab:data-summary-0) summarizes the various field trial parameter combinations. The field plot cannot be any shorter than the minimum length specified in the table because reliable yield observations occur in only 21.48 meters of a field plot after subtracting a 5.37-m-long transition zone from both ends, and that 21.48 meters provides four subplots for analysis. If the field plot is further shortened, there will be insufficient yield data observations for analysis from a single plot.
+
+## Simulation Calibration
+
+### Data for Yield Response Function Estimation
+
+The data used to establish the simulation’s data generation process are from a 2017 checkerboard trial in a 28.8-hectare corn field in northern Illinois that used completely randomized nitrogen rates. The nitrogen rate applied and the dry yield per hectare were collected for the purpose of this paper.
+
+Field plots in these trials were 18.3 meters wide and 85.3 meters long, approximately the width of a section of a producers’ sprayer. To reduce noise, transition zones were omitted from field plots. By comparing the map with the actual nitrogen rate applied  to the treatment map during the cleaning process, 9.1 meters was determined to be the length of the transition zone, and that transition zone in each plot was removed from the original data. Partial plots and field plots on the field’s edges were also eliminated, as the yield monitor’s initial estimates of the yield level are extremely unreliable as the empty harvester enters the field. The cleaning removed outliers from the dry yield data while maintaining the mean of the dry yield in each plot. This field contained 234 field plots, which were divided into four subplots based on the median of the data contained within. This resulted in the generation of 936 observations. In the entire field, a base application of 215 kilograms per hectare of nitrogen was made. Additional nitrogen treatments of 47, 75, 98, and 120 kilograms per hectare resulted in treatment amounts of 262, 290, 312, and 335 kilograms per hectare, respectively. The cleaned data are depicted with subplots in table \@ref(fig:cleaned-nitrogen-larson) and table \@ref(fig:cleaned-yield-larson) Notably, table \@ref(fig:treatment-plot) depicts the nitrogen rate applied to each subplot, which was not always consistent across treatment plots due to applicator error.
+
+### Yield Response Function
+
+The agricultural production process is defined by input-output relationships [@nijland2008integrating], which are frequently expressed functionally. The academic literature indicates that multiple functional forms, including quadratic, quadratic plateau, square root, Mitscherlich-Baule, linear von Liebig, and nonlinear von Liebig, have been used to describe yield response to nitrogen.
+
+The quadratic plateau form is chosen as the yield response function:
+$$
+\mathrm{f}^{\mathrm{i}}(\mathrm{N}) \equiv \mathrm{f}\left(\mathrm{N}, \beta_{0}^{\mathrm{i}}, \beta_{1}^{\mathrm{i}}, \beta_{2}^{\mathrm{i}}, \mathrm{N}_{\mathrm{k}}^{\mathrm{i}}\right)= \begin{cases}\beta_{0}^{\mathrm{i}}+\beta_{1}^{\mathrm{i}} \mathrm{N}+\beta_{2}^{\mathrm{i}} \mathrm{N}^{2}, & \mathrm{~N}<\mathrm{N}_{\mathrm{k}}^{\mathrm{i}} \\ \text { plateau }=\beta_{0}^{\mathrm{i}}+\beta_{1}^{\mathrm{i}} N_{\mathrm{k}}^{\mathrm{i}}+\beta_{2}^{\mathrm{i}} \mathrm{N}_{\mathrm{k}}^{\mathrm{i}^{2}}, & \mathrm{~N} \geq \mathrm{N}_{\mathrm{k}}^{\mathrm{i}}\end{cases}
+$$ {#eq:qp}
+
+In equation ([-@eq:qp]), the slopes $\beta_{1}$ and $\beta_{2}$ denote the curvature of the yield response to nitrogen, whereas $\beta_{0}$ denotes the average yield in the absence of N fertilizer application. Each cell in the heterogeneous fields we are simulating has a unique set of $\beta_{i}$ values, whereas all cells in the homogeneous fields we are simulating have an identical set of $\beta_{i}$ values.The parameters above are estimated using the data described previously, and the field values of $\beta_{0}$, $\beta_{1}$ and $\beta_{2}$ are used as a reference for generating $\beta_i$ for individual cells. Yield increases as N approaches $\mathrm{N}_{\mathrm{k}}^{\mathrm{i}}$, and then reaches and maintains the yield plateau. Table \@ref(fig:yield-response) shows the yield response curve with the estimated parameters.
+
+The researchers assume that the $\beta_{i}$ generated for each cell represents the true parameters of the yield response function. The true EONR will be as follows, based on the true yield response functions for each cell:
+$$
+\mathrm{N}_{\mathrm{TRUE}}^{\mathrm{i}^{*}}=\underset{\mathrm{N}}{\operatorname{argmax}}\left[ P_{C}\mathrm{f}^{\mathrm{i}}(\mathrm{N})- P_{n}\mathrm{N}\right]
+$$ {#eq:find-n}
+
+where $\P_{C}$ is the unit price for corn, and $\P_{N}$ is the unit price for nitrogen. The maximized profit per hectare will then be:
+$$
+\Pi_{\mathrm{TRUE}}^{*}=\frac{1}{\mathrm{I}} \sum_{\mathrm{i}=1}^{\mathrm{I}}\left[P_{C}\mathrm{f}^{\mathrm{i}}\left(\mathrm{N}_{\mathrm{TRUE}}^{\mathrm{i}^{*}}\right)-P_{N}\mathrm{N}_{\mathrm{TRUE}}^{\mathrm{i}^{ }}\right]
+$$ {#eq:true-profit}
+
+
+### Spatial Error Component
+
+Note that the yield response function above omits a large number of other variables that affect yield, resulting in a spatial correlation of the error term. The variance of the residuals of the estimated yield response function is calculated, and spatial correlation is tested. To estimate the spatial interaction between yields, a spatial error is introduced, and the spatial error term is generated using a geostatistical model.
+
+### Estimation of Measurement Errors
+
+Accurately mapping of trial yields is a critical yet difficult step in PA. [@blackmore1996yield] concluded that six major factors affect the accuracy of yield monitors: (1) grain threshing time, (2) grain surging through the grain combine transport system, (3) GPS errors, (4) grain losses from the combine, (5) unknown crop width entering the header during harvest, and (6) sensor accuracy and calibration. (1), (2), and (3) are controllable by removing transition zones, whereas (4), (5), and (6) are dependent on the type of sensors used in the machine, specifically the grain flow sensor, the cutting width sensor, and the moisture content sensor. The accuracy range of yield monitors is deduced in this paper using the three sensors installed in yield monitors.
+
+The following yield equation from [@luck2004precision] is used to link the yield monitor accuracy with the accuracy of the different sensors:
+$$
+\text { Yield }\left(\frac{b u}{a c}\right)=(43,560)\left(\frac{m * t}{d * w * p}\right)\left(\frac{100-M C_{\text {harvest }}}{100-M C_{\text {market }}}\right)
+$$ {#eq:yield}
+
+$m$ = mass flow rate estimated from the impact plate sensor (lb/sec). 
+$t$ = logging interval of the yield monitoring system (sec). 
+$d$ = distance traveled between logged data points(ft). 
+$w$ = header cut width setting(ft). 
+$p$ = grain density or test weight(lb/bu). 
+$M C _ {harvest}$ = moisture content measurement from the yield monitor moisture sensor ($\%$). 
+$M C _ {market}$ = marketable moisture content ($\%$). 
+43,560 = conversion from $f t ^ { 2 }$ to acres.
+
+$m$ is estimated from the grain flow sensor, $w$ is captured by the cutting width sensor, and $M C _ {harvest}$ is obtained from the moisture sensor. The other parameters are constant for one machine. [@chung2016sensing] summarized the accuracy of different sensor types. The accuracy range for the grain flow sensor of corn is 95\% to 97\%, the accuracy of the cutting width sensor ranges from 91.1\% to 95.6\%, and the accuracy of the moisture sensor is from 90\% to 97\%. Substituting the accuracy levels into the equation above, the accuracy of a yield monitor can be anywhere from 90% to 98%, depending on the type of sensors are installed in the yield monitor. In this paper, we test the impact of the yield monitor accuracy at the lower bar level of 90% for the optimal plot length. Specifically, we evaluate the impact of two yield monitor accuracy levels: 70\% and 90\%. Yield monitors that are only 70\% accurate may be less common, but there is no guarantee that all producers have yield monitors that are at least 90\% accurate. The accuracy level of 70\% is therefore added to examine how the plot length will be affected when the yield monitor accuracy level is decreased to a lower level.
+
+Let $y$ and $e$ denote the actual yield at the cell level and the measurement error introduced by the yield monitor. The yield level reported by the yield monitor is therefore $y+e$, denoted by $\tilde { y }$. The correlation coefficient of $\rho$ between $y$ and $\tilde { { y } }$ is as follows:
+$$
+\rho=\frac{\sigma_{y, \tilde{y}}}{\sqrt{\sigma_{y}^{2} \times \sigma_{\tilde{y}}^{2}}}=\frac{\sigma_{y, y+e}}{\sqrt{\sigma_{y}^{2} \times \sigma_{y+e}^{2}}}
+$$ {#eq:rho-1}
+where $\sigma _ { \tilde { y } } ^ { 2 }$ denotes the variance of $\tilde { y }$, $\sigma _ { y , \tilde { y } }$ denotes the covariance between $y$ and $\tilde { y }$, and $\sigma _ { y } ^ { 2 }$ denotes the variance of $y$. The measurement error term generated by the yield monitor is assumed to be statistically independent of the actual yield. This assumption is inaccurate because the measurement error will follow a slightly different distribution according to the true yield level. However, it is too difficult to distinguish the different distributions, and because they are only slightly different, the measurement error for the whole field is assumed to follow the same distribution. Under these assumptions, the covariance between $y$ and $e$ is zero. Because
+$$
+\sigma_{y+e}^{2}=\sigma_{y}^{2}+\sigma_{e}^{2}+2 \sigma_{y, e}^{2}
+$$ {#eq:rho-2}
+we have:
+$$
+\rho=\frac{\sigma_{y}^{2}}{\sqrt{\sigma_{y}^{2} \times\left(\sigma_{y}^{2}+\sigma_{e}^{2}\right)}}
+$$ {#eq:rho-3}
+Rearranging the equation above, we obtain:
+$$
+\sigma_{e}^{2}=\sigma_{y}^{2}\left(\frac{1-\rho^{2}}{\rho^{2}}\right)
+$$ {#eq:sigma}
+
+The variance of the actual yield is calculated at the cell level. The measurement error $e$ is assumed to be drawn from a normal distribution$N \left( 0 , \sigma _ { e } ^ { 2 } \right)$, and can be added to the actual yield $y$ to simulate the yield. Note that yield monitors report one estimate per second or 0.56 estimates per meter on average. Therefore, there are multiple yield estimates for every subplot. The mean of the yield estimates in one subplot is used as the measured yield. 
+
+## Production Function Estimation
+
+After generating yield observations at the plot level, we estimate the production function. Due to the final organization of the simulated yield measurements at the subplot level, we estimate the production function at the subplot level. Because researchers do not know the true functional form of the yield response to nitrogen, three different models are used to estimate the production function in this step in order to properly capture the production function’s curvature: geographically weighted regression (GWR), balanced random forest (BRF), and generalized additive model (GAM).
+
+### Variable-Rate Recommendation Based on a Geographically Weighted Regression Model (VR-GWR)
+
+Let $\hat{f}_{G W R}^{j}$ denote the yield response function estimated for the subplot, the estimated $\widehat { E O N R }_{G W R}$ for the subplot is then:
+$$
+\widehat{N}_{G W R}^{j *}=\underset{N}{\operatorname{argmax}}\left[p \hat{f}_{G W R}^{j}(N)-w N\right]
+$$ {#eq:gwr-n}
+The resulting per-hectare profit for the whole field is then:
+$$
+\Pi_{G W R}^{*}=\frac{1}{I} \sum_{i=1}^{J}\left[p f^{i}\left(\widehat{N}_{G W R}^{j, i *}\right)-w \widehat{N}_{G W R}^{j, i *}\right]
+$$ {#eq:gwr-profit}
+
+### Variable-Rate Recommendation Based on the Balanced Random Forest Model (VR-BRF)
+
+Let $\hat{f}_{B R F}^{j}$ denote the estimated yield response to N rate based on the RF model for a subplot j. The estimated $\widehat { E O N R }_{B R F}$ for the subplot is then:
+$$
+\Pi_{B R F}^{*}=\frac{1}{I} \sum_{i=1}^{J}\left[p f^{i}\left(\widehat{N}_{B R F}^{j, i *}\right)-w \widehat{N}_{B R F}^{j, i *}\right]
+$$ {#eq:brf-profit}
+
+### Uniform-Rate Recommendation Based on the Generalized Additive Model (UR-GAM)
+
+The generalized additive model (GAM) contains a parametric form for some component of the data with weak nonparametric restrictions on the remainder of the model. Letting $\phi _ { k }$ denote the kth cubic spline; then, the parametric form of the nonlinear function is $\sum _ { k = 1 } ^ { K } \beta _ { k } \phi _ { k } \left( N _ { i } \right)$, where$\beta _ { k }$ represents parameters to be estimated. Let $\varepsilon$ denote the remainder of the model, following the conditional mean restriction on $\varepsilon$: $E ( \varepsilon | N ) = 0$. Thus, the estimation equation is:
+$$
+y_{i}=\sum_{k=1}^{K} \beta_{k} \phi_{k}\left(N_{i}\right)+\varepsilon_{i}
+$$ {#eq:gam}
+
+## Comparison of the Economic Optimum Nitrogen Rate (EONR) and its Profitability
+
+EONR is a term that refers to the rates of nitrogen fertilizer that are expected to maximize the net revenue generated by fertilizer applied per unit of land area. Because the spatial error component is nitrogen-independent, the EONR derived from the yield response function is the true EOR in all simulated fields. It is obtained by solving the following maximization problem:
+$$
+\operatorname{Max}\left\{P_{c}\left(\beta_{0}+\beta_{1} N+\beta_{2} N^{2}\right)-P_{N} N\right\}
+$$ {#eq:max-profit}
+where $P _ { c }$ denotes the price of corn(\$/kg), and $P _ { N }$ denotes the price of nitrogen (\$/kg). $P _ { c }$  and $P _ { N }$  are respectively \$0.17 per kg, and \$3.24 per kg, respectively. These were the current prices at the time of the simulation.
+
+We assess how the plot length and number of treatments affect the EONR derived from the estimated production function for the simulated field, denoted $\widehat { E O N R }$. $\widehat { E O N R }$ maximizes the following equation that calculates the net revenue per acre for the simulated fields:
+$$
+\pi=P_{c} f(N)-P_{N} N
+$$ {#eq:profit}
+where $f(N)$ is the yield estimated by the generalized additive model in Equation 8. The distribution of $\widehat { E O N R }$ and the difference between $\hat { \pi }$ and $\pi ^ { o }$  with the different experimental parameter values are compared to determine the optimal plot length and number of treatments, and field size. 
+
+# Results and Analysis
+
+## Results for Hetereogenenous Fields
+
+We examined the best-designed experimental settings derived from the results using both GWR and BRF estimation. We begin with the GWR estimation and compare the results to the BRF estimations.
+
+### Production Function with GWR Estimation
+
+In general, Tables \@ref(tab:data-summary-1) and \@ref(tab:data-summary-2) demonstrate that having four treatments consistently outperforms having more treatments for both field sizes, and that the profit obtained from different designs decreases as plot length increases.
+
+Figure \@ref(fig:num-treatment-gwr) shows that not only is having four treatments optimal, but the estimated profit decreases as the number of treatments increases, with one exception: having six treatments in a smaller field with a strip design is worse than having eight treatments. Additionally, we can see from figure \@ref(fig:num-treatment-gwr) that the conclusions hold true for both the 13.29 hectare and 26.58 hectare fields.
+
+### Production Function with BRF Estimation
+
+The optimal design for both Tables \@ref(tab:data-summary-3) and \@ref(tab:data-summary-4) occurred when eight treatments were used and had shorter plot lengths. Additionally, Tables \@ref(tab:data-summary-3) and \@ref(tab:data-summary-4) demonstrate that the estimated profit decreases as the number of treatments decreases, contrary to the conclusions drawn from the GWR estimation. Additionally, the profit obtained from various plot lengths appears to be quite similar. By comparing the profit obtained at 12 and 24 plot lengths, we can conclude that 12 plot lengths are equivalent to 24 plot lengths, which is consistent with the conclusion reached using the GWR estimation model.
+
+Although the recommendation for the number of treatments is diametrically opposed between GWR and BRF estimation, the profit difference between four and eight treatments is not significant at the shortest plot length, and at the second shortest plot length, the profit is significantly higher with four treatments than with eight with GWR. Thus, in heterogeneous fields, we believe that having four treatments and a plot length of 12 cells, or 21.48 meters, is the optimal design.
+
+## Results for Homogeneous Fields
+
+Both Tables \@ref(tab:data-summary-5) and \@ref(tab:data-summary-6) demonstrate a significant increase in profit when the number of treatments is increased from four to six. Although the profit difference between the 13.29 hectare and 26.58 hectare fields is small, the profit decreases with plot length, demonstrating the advantage of checkerboard trials over strip trials. Profitability is maximized with six treatments and a shorter plot length, as illustrated in Figure \@ref(fig:num-treatment-gam). Figure \@ref(fig:plot-length-gam) proves that, except in one case involving four treatments in the 26.58 fields, the shortest plot length is always the best. However, with eight treatments, which is the preferred number of treatments, the profit achieved with the shortest plot length is much significantly higher than the second shortest plot length. In that case, the shortest plot length for a homogeneous field is still preferred.
+
+## Comparative Statics Analysis
+
+Comparative statics analyses from yield monitor accuracy and field sizes are conducted to understand how conclusions vary with respect to an effective experimental design.
+
+We specifically examine the effect of yield monitor accuracy at 70\% and 90\%. While the accuracy of modern yield monitors ranges from 90\% to 98\%, a yield monitor with a lower accuracy as calculated by [@al2000verification] is included because a portion of producers still use yield monitors from 17 years ago. It is beneficial to assess the value of increasing the accuracy of yield monitors.
+
+As shown in Figures \@ref(fig:yield-accuracy-gwr) to \@ref(fig:yield-accuracy-brf), and \@ref(fig:yield-accuracy-gam), the impact of yield monitor accuracy is very insignificant. Figures \@ref(fig:num-treatment-gwr), \@ref(fig:num-treatment-brf), \@ref(fig:num-treatment-gam), \@ref(fig:plot-length-gwr), \@ref(fig:plot-length-brf), and \@ref(fig:plot-length-gam) reveal that profit is consistently higher in the 26.58-hectare fields than in the 13.29 hectare fields, with similar trends as those for the number of treatments or vchanges in plot length.
+
+# Conclusion
+
+The main objectives of this study are (1) evaluate yield responses to the N fertilizer rate estimated by adjusting experimental designs, and (2) identify key factors that impact the performance of alternative designs.
+
+As a result of the findings above, we can conclude that the accuracy of the yield monitor has a negligible effect on the selection of the optimal experimental design. In heterogeneous fields, the ideal experimental design is a plot length of 21.48 meters with four treatments, and a plot length of the same length with six treatments on homogeneous fields. The recommendations for heterogeneous and homogeneous fields are nearly identical, but differ in terms of the number of treatments, primarily because we want to ensure an adequate number of replications for each treatment across the fields especially when there exists larger variation in soil. Additionally, fields with varying soil compositions can be tested for robustness.
+
+`r run_pagebreak()`
+
+# Acknowledgement
+This work is/was supported by a USDA National Institute of Food and Agriculture Food Security Program grant, award number 2016-68004-24769.
+
+Preliminary Draft. Please do not cite or share without the permission of the authors.
+
+`r run_pagebreak()`
+
+# References
+
+<br />
+
+<div id="refs"></div>
+
+`r run_pagebreak()`
+
+# Tables
+```{r tab.id = "data-summary-0", cache = F, tab.cap = "All Combinations of Experimental Designs", tab.cap.style = "Table Caption"}
+data_summary_0
+```
+
+```{r tab.id = "data-summary-1", cache = F, tab.cap = "GWR Simulation Results of Different Experimental Designs on the 13.29-Hectare Heterogeneous Field", tab.cap.style = "Table Caption"}
+data_summary_1
+```
+
+```{r tab.id = "data-summary-2", cache = F, tab.cap = "GWR Simulation Results of Different Experimental Designs on the 26.58-Hectare Heterogeneous Field", tab.cap.style = "Table Caption"}
+data_summary_2
+```
+
+```{r tab.id = "data-summary-3", cache = F, tab.cap = "BRF Simulation Results of Different Experimental Designs on the 13.29-Hectare Heterogeneous Field", tab.cap.style = "Table Caption"}
+data_summary_3
+```
+
+```{r tab.id = "data-summary-4", cache = F, tab.cap = "BRF Simulation Results of Different Experimental Designs on the 26.58-Hectare Heterogeneous Field", tab.cap.style = "Table Caption"}
+data_summary_4
+```
+
+```{r tab.id = "data-summary-5", cache = F, tab.cap = "GAM Simulation Results of Different Experimental Designs on the 13.29-Hectare Homogeneous Field", tab.cap.style = "Table Caption"}
+data_summary_5
+```
+
+```{r tab.id = "data-summary-6", cache = F, tab.cap = "GAM Simulation Results of Different Experimental Designs on on the 26.58-Hectare Homogeneous Field", tab.cap.style = "Table Caption"}
+data_summary_6
+```
+
+`r run_pagebreak()`
+
+# Figures
+
+```{r Strip-trial-graph, cache = F, fig.cap = "A small-plot experiment and a replicated strip trial in the same field. The small-plot experiment is in the upper left corner and the strip trial with two nitrogen treatments is in the center. From [@kyveryga2018farm]", fig.dim = c(8, 6)}
+knitr::include_graphics(here("Old_Writing/Fig1.png"))
+```
+
+```{r treatment-plot, cache = F, fig.cap = "N-fertilizer treatment map with four different treatments", fig.dim = c(8, 6)}
+knitr::include_graphics(here("Old_Writing/Fig5.png"))
+```
+
+```{r cleaned-nitrogen-larson, cache = F, fig.cap = "The cleaned nitrogen applied data with subplots", fig.dim = c(8, 6)}
+knitr::include_graphics(here("Old_Writing/Fig6.png"))
+```
+
+```{r cleaned-yield-larson, cache = F, fig.cap = "The cleaned trial yield data with subplots", fig.dim = c(8, 6)}
+knitr::include_graphics(here("Old_Writing/Fig7.png"))
+```
+
+```{r transition, cache = F, fig.cap = "Two adjacent treatment plots are outlined and subdivided into cells", fig.dim = c(8, 6)}
+knitr::include_graphics(here("Code/Graph/transition_zone.png"))
+```
+
+```{r Nstar-map, cache = F, fig.cap = "Simulated Spatial Distribution of true EONR (Variogram Range=400 meters)", fig.dim = c(8, 6)}
+N_star_raster
+```
+
+```{r yield-response, cache = F, fig.cap = "The quadratic plateau of the estimated yield response to nitrogen with the estimated parameters", fig.dim = c(8, 6)}
+knitr::include_graphics(here("Figures/conceptual_yield.png"))
+```
+
+```{r treatment-map, cache = F, fig.cap = "The treatment map of the 2017 checkerboard trial", fig.dim = c(8, 6)}
+treatment_map
+```
+
+```{r latin-map, cache = F, fig.cap = "The treatment map of a simulated Latin square design with plot length of 12 cells", fig.dim = c(8, 6)}
+latin_design
+```
+
+```{r latin-strip-map, cache = F, fig.cap = "The treatment map of a simulated strip trial design", fig.dim = c(8, 6)}
+latin_design_strip
+```
+
+```{r num-treatment-gwr, cache = F, fig.cap = "Impact of number of treatment on profit estimated by GWR", fig.dim = c(8, 6)}
+g_num_treats_gwr
+```
+
+```{r num-treatment-brf, cache = F, fig.cap = "Impact of number of treatment on profit estimated by BRF", fig.dim = c(8, 6)}
+g_num_treats_brf
+```
+
+```{r num-treatment-gam, cache = F, fig.cap = "Impact of number of treatment on profit estimated by GAM", fig.dim = c(8, 6)}
+g_num_treats_gam
+```
+
+```{r plot-length-gwr, cache = F, fig.cap = "Impact of plot length on profit estimated by GWR", fig.dim = c(8, 6)}
+g_plot_length_gwr
+```
+
+```{r plot-length-brf, cache = F, fig.cap = "Impact of plot length on profit estimated by BRF", fig.dim = c(8, 6)}
+g_plot_length_brf
+```
+
+```{r plot-length-gam, cache = F, fig.cap = "Impact of plot length on profit estimated by GAM", fig.dim = c(8, 6)}
+g_plot_length_gam
+```
+
+```{r yield-accuracy-gwr, cache = F, fig.cap = "Impact of yield monitor accuracy on profit estimated by GWR", fig.dim = c(8, 6)}
+g_yield_accuracy_gwr
+```
+
+```{r yield-accuracy-brf, cache = F, fig.cap = "Impact of yield monitor accuracy on profit estimated by BRF", fig.dim = c(8, 6)}
+g_yield_accuracy_brf
+```
+
+```{r yield-accuracy-gam, cache = F, fig.cap = "Impact of yield monitor accuracy on profit estimated by GAM", fig.dim = c(8, 6)}
+g_yield_accuracy_gam
+```
+
